@@ -58,15 +58,20 @@
         ];
 
         async function holeJson(url) {
-            try {
-                const res = await fetch(url);
-                if (res.ok) return await res.json();
-            } catch (e) {}
-            try {
-                const proxy = `https://allorigins.win{encodeURIComponent(url)}`;
-                const res2 = await fetch(proxy);
-                if (res2.ok) return await res2.json();
-            } catch (e) {}
+            const wege = [
+                url,
+                `https://corsproxy.io{encodeURIComponent(url)}`,
+                `https://codetabs.com{encodeURIComponent(url)}`
+            ];
+            for (const w of wege) {
+                try {
+                    const res = await fetch(w);
+                    if (res.ok) {
+                        const json = await res.json();
+                        if (Array.isArray(json) && json.length > 0) return json;
+                    }
+                } catch (e) {}
+            }
             return null;
         }
 
@@ -79,7 +84,7 @@
             for (const liga of LIGEN) {
                 for (const saison of ["2026", "2025"]) {
                     const data = await holeJson(`https://openligadb.de{liga.code}/${saison}`);
-                    if (Array.isArray(data) && data.length > 0) {
+                    if (data) {
                         data.forEach(t => {
                             const sp = t.matches || 0;
                             const remis = t.draw || 0;
@@ -98,7 +103,7 @@
 
             if (alleTeams.length === 0) {
                 status.style.color = "#d9534f";
-                status.textContent = "Keine Verbindung zur Datenbank möglich.";
+                status.textContent = "Server antwortet nicht. Bitte kurz warten und erneut klicken.";
             } else {
                 status.textContent = "";
                 anzeigen();
