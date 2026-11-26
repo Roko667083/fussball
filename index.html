@@ -3,13 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Europa Unentschieden-Scanner</title>
+    <title>Europa Unentschieden-Scanner (Live)</title>
     <style>
         body { font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; padding: 15px; background: #f4f6f9; color: #222; }
         h1 { text-align: center; color: #1a202c; }
         .box { background: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
-        input, select, button { padding: 10px 14px; font-size: 1rem; border: 1px solid #ccc; border-radius: 6px; }
-        input { flex: 1; min-width: 240px; }
+        select, button { padding: 10px 15px; font-size: 1rem; border: 1px solid #ccc; border-radius: 6px; }
         button { background: #0066cc; color: white; border: none; font-weight: bold; cursor: pointer; }
         button:hover { background: #004c99; }
         table { width: 100%; border-collapse: collapse; background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
@@ -21,10 +20,9 @@
 </head>
 <body>
 
-    <h1>⚽ Europa Unentschieden-Scanner</h1>
+    <h1>⚽ Europa Unentschieden-Scanner (Live)</h1>
 
     <div class="box">
-        <input type="text" id="apiKey" placeholder="Hier deinen Football-Data.org Token einfügen">
         <select id="sortierung" onchange="anzeigen()">
             <option value="remis">🏆 Meiste Unentschieden</option>
             <option value="quote">📈 Höchste Remis-Quote (%)</option>
@@ -33,7 +31,7 @@
         <button onclick="ladeDaten()">🔄 Live-Daten laden</button>
     </div>
 
-    <div id="status">Bitte deinen API-Token einfügen und auf „Live-Daten laden“ klicken.</div>
+    <div id="status">Lade aktuelle Tabellen...</div>
 
     <table id="tabelle" style="display:none;">
         <thead>
@@ -53,93 +51,52 @@
         let alleTeams = [];
 
         const LIGEN = [
-            { name: "🇩🇪 1. Bundesliga", code: "BL1" },
-            { name: "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League", code: "PL" },
-            { name: "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Championship (2. Liga)", code: "ELC" },
-            { name: "🇪🇸 La Liga", code: "PD" },
-            { name: "🇮🇹 Serie A", code: "SA" },
-            { name: "🇫🇷 Ligue 1", code: "FL1" },
-            { name: "🇳🇱 Eredivisie", code: "DED" },
-            { name: "🇵🇹 Primeira Liga", code: "PPL" }
+            { name: "🇩🇪 1. Bundesliga", code: "ger.1" },
+            { name: "🇩🇪 2. Bundesliga", code: "ger.2" },
+            { name: "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League", code: "eng.1" },
+            { name: "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Championship", code: "eng.2" },
+            { name: "🇪🇸 La Liga", code: "esp.1" },
+            { name: "🇮🇹 Serie A", code: "ita.1" },
+            { name: "🇫🇷 Ligue 1", code: "fra.1" },
+            { name: "🇳🇱 Eredivisie", code: "ned.1" }
         ];
 
-        window.onload = () => {
-            const gespeichert = localStorage.getItem("fd_token");
-            if (gespeichert) {
-                document.getElementById("apiKey").value = gespeichert;
-                ladeDaten();
-            }
-        };
-
-        async function holeLiga(code, token) {
-            const ziel = `https://football-data.org{code}/standings`;
-            const proxies = [
-                `https://corsproxy.io{encodeURIComponent(ziel)}`,
-                `https://freeboard.io{ziel}`,
-                ziel
-            ];
-
-            for (const url of proxies) {
-                try {
-                    const res = await fetch(url, {
-                        headers: { "X-Auth-Token": token }
-                    });
-                    if (res.ok) {
-                        const json = await res.json();
-                        if (json && json.standings) return { data: json, fehler: null };
-                    } else {
-                        var letzterFehler = `HTTP ${res.status}`;
-                    }
-                } catch (e) {
-                    var letzterFehler = "Proxy/Netzwerk blockiert";
-                }
-            }
-            return { data: null, fehler: letzterFehler || "Unbekannter Fehler" };
-        }
-
         async function ladeDaten() {
-            const token = document.getElementById("apiKey").value.replace(/\s+/g, "");
             const status = document.getElementById("status");
-            if (!token) {
-                status.style.color = "#d9534f";
-                status.textContent = "Bitte füge zuerst deinen Token aus der E-Mail ein!";
-                return;
-            }
-            localStorage.setItem("fd_token", token);
+            status.style.color = "#0066cc";
+            status.textContent = "Lade Live-Tabellen aus ganz Europa...";
             alleTeams = [];
-            document.getElementById("tabelle").style.display = "none";
-            let fehlerInfo = "";
 
-            for (let i = 0; i < LIGEN.length; i++) {
-                const liga = LIGEN[i];
-                status.style.color = "#0066cc";
-                status.textContent = `Lade ${liga.name} (${i + 1} von ${LIGEN.length})...`;
-
-                const res = await holeLiga(liga.code, token);
-                if (res.data && res.data.standings) {
-                    const total = res.data.standings.find(s => s.type === "TOTAL");
-                    if (total && total.table) {
-                        total.table.forEach(row => {
-                            const sp = row.playedGames || 0;
-                            const remis = row.draw || 0;
+            for (const liga of LIGEN) {
+                try {
+                    const url = "https://espn.com" + liga.code + "/standings";
+                    const res = await fetch(url);
+                    if (res.ok) {
+                        const data = await res.json();
+                        const gruppe = data.children && data.children.length > 0 ? data.children[0] : null;
+                        const entries = gruppe && gruppe.standings && gruppe.standings.entries ? gruppe.standings.entries : [];
+                        for (let i = 0; i < entries.length; i++) {
+                            const item = entries[i];
+                            const stats = item.stats || [];
+                            const gpObj = stats.find(s => s.name === "gamesPlayed");
+                            const tieObj = stats.find(s => s.name === "ties");
+                            const sp = gpObj ? Number(gpObj.value) : 0;
+                            const remis = tieObj ? Number(tieObj.value) : 0;
                             alleTeams.push({
-                                name: row.team.shortName || row.team.name,
+                                name: item.team.shortDisplayName || item.team.displayName,
                                 liga: liga.name,
                                 spiele: sp,
                                 remis: remis,
                                 quote: sp > 0 ? +(remis / sp * 100).toFixed(1) : 0
                             });
-                        });
+                        }
                     }
-                } else {
-                    fehlerInfo = res.fehler;
-                }
-                await new Promise(r => setTimeout(r, 800));
+                } catch (e) {}
             }
 
             if (alleTeams.length === 0) {
                 status.style.color = "#d9534f";
-                status.textContent = `Keine Daten geladen (${fehlerInfo}). Bitte prüfe deinen 32-stelligen Token.`;
+                status.textContent = "Keine Daten abrufbar. Bitte im Handy-Browser testen oder Werbeblocker prüfen.";
             } else {
                 status.textContent = "";
                 anzeigen();
@@ -161,7 +118,7 @@
 
             const tbody = document.getElementById("tbody");
             tbody.innerHTML = "";
-            liste.slice(0, 50).forEach((t, idx) => {
+            liste.slice(0, 60).forEach((t, idx) => {
                 tbody.innerHTML += `
                     <tr>
                         <td><strong>${idx + 1}.</strong></td>
@@ -175,6 +132,8 @@
             });
             document.getElementById("tabelle").style.display = "table";
         }
+
+        window.onload = ladeDaten;
     </script>
 </body>
 </html>
