@@ -57,6 +57,19 @@
             { name: "🇦🇹 Österreich Bundesliga", code: "%C3%B6bl1" }
         ];
 
+        async function holeJson(url) {
+            try {
+                const res = await fetch(url);
+                if (res.ok) return await res.json();
+            } catch (e) {}
+            try {
+                const proxy = `https://allorigins.win{encodeURIComponent(url)}`;
+                const res2 = await fetch(proxy);
+                if (res2.ok) return await res2.json();
+            } catch (e) {}
+            return null;
+        }
+
         async function ladeDaten() {
             const status = document.getElementById("status");
             status.style.color = "#0066cc";
@@ -65,32 +78,27 @@
 
             for (const liga of LIGEN) {
                 for (const saison of ["2026", "2025"]) {
-                    try {
-                        const res = await fetch(`https://openligadb.de{liga.code}/${saison}`);
-                        if (res.ok) {
-                            const data = await res.json();
-                            if (Array.isArray(data) && data.length > 0) {
-                                data.forEach(t => {
-                                    const sp = t.matches || 0;
-                                    const remis = t.draw || 0;
-                                    alleTeams.push({
-                                        name: t.teamName,
-                                        liga: liga.name,
-                                        spiele: sp,
-                                        remis: remis,
-                                        quote: sp > 0 ? +(remis / sp * 100).toFixed(1) : 0
-                                    });
-                                });
-                                break;
-                            }
-                        }
-                    } catch (e) {}
+                    const data = await holeJson(`https://openligadb.de{liga.code}/${saison}`);
+                    if (Array.isArray(data) && data.length > 0) {
+                        data.forEach(t => {
+                            const sp = t.matches || 0;
+                            const remis = t.draw || 0;
+                            alleTeams.push({
+                                name: t.teamName,
+                                liga: liga.name,
+                                spiele: sp,
+                                remis: remis,
+                                quote: sp > 0 ? +(remis / sp * 100).toFixed(1) : 0
+                            });
+                        });
+                        break;
+                    }
                 }
             }
 
             if (alleTeams.length === 0) {
                 status.style.color = "#d9534f";
-                status.textContent = "Server antwortet gerade nicht. Bitte in 10 Sekunden nochmal klicken.";
+                status.textContent = "Keine Verbindung zur Datenbank möglich.";
             } else {
                 status.textContent = "";
                 anzeigen();
