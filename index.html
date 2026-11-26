@@ -66,45 +66,52 @@
             status.textContent = "Lade aktuelle Saison-Daten...";
             alleTeams = [];
 
+            const ordner = ["2026-27", "2026-2027", "2025-26"];
+
             for (const liga of LIGEN) {
-                try {
-                    const url = "https://githubusercontent.com" + liga.file;
-                    const res = await fetch(url);
-                    if (res.ok) {
-                        const data = await res.json();
-                        const stats = {};
-                        (data.matches || []).forEach(m => {
-                            if (m.score && Array.isArray(m.score.ft) && m.score.ft.length === 2) {
-                                const t1 = m.team1;
-                                const t2 = m.team2;
-                                if (!stats[t1]) stats[t1] = { spiele: 0, remis: 0 };
-                                if (!stats[t2]) stats[t2] = { spiele: 0, remis: 0 };
-                                stats[t1].spiele += 1;
-                                stats[t2].spiele += 1;
-                                if (m.score.ft[0] === m.score.ft[1]) {
-                                    stats[t1].remis += 1;
-                                    stats[t2].remis += 1;
+                for (const jahr of ordner) {
+                    try {
+                        const url = `https://githubusercontent.com{jahr}/${liga.file}`;
+                        const res = await fetch(url);
+                        if (res.ok) {
+                            const data = await res.json();
+                            const stats = {};
+                            (data.matches || []).forEach(m => {
+                                if (m.score && Array.isArray(m.score.ft) && m.score.ft.length === 2) {
+                                    const t1 = m.team1;
+                                    const t2 = m.team2;
+                                    const tore1 = m.score.ft.at(0);
+                                    const tore2 = m.score.ft.at(1);
+                                    if (!stats[t1]) stats[t1] = { spiele: 0, remis: 0 };
+                                    if (!stats[t2]) stats[t2] = { spiele: 0, remis: 0 };
+                                    stats[t1].spiele += 1;
+                                    stats[t2].spiele += 1;
+                                    if (tore1 === tore2) {
+                                        stats[t1].remis += 1;
+                                        stats[t2].remis += 1;
+                                    }
                                 }
-                            }
-                        });
-                        Object.keys(stats).forEach(teamName => {
-                            const sp = stats[teamName].spiele;
-                            const remis = stats[teamName].remis;
-                            alleTeams.push({
-                                name: teamName,
-                                liga: liga.name,
-                                spiele: sp,
-                                remis: remis,
-                                quote: sp > 0 ? +(remis / sp * 100).toFixed(1) : 0
                             });
-                        });
-                    }
-                } catch (e) {}
+                            Object.keys(stats).forEach(teamName => {
+                                const sp = stats[teamName].spiele;
+                                const remis = stats[teamName].remis;
+                                alleTeams.push({
+                                    name: teamName,
+                                    liga: liga.name,
+                                    spiele: sp,
+                                    remis: remis,
+                                    quote: sp > 0 ? +(remis / sp * 100).toFixed(1) : 0
+                                });
+                            });
+                            break;
+                        }
+                    } catch (e) {}
+                }
             }
 
             if (alleTeams.length === 0) {
                 status.style.color = "#d9534f";
-                status.textContent = "Fehler beim Laden der GitHub-Daten.";
+                status.textContent = "Verbindung zu GitHub blockiert. Bitte Browser-Schutz/Werbeblocker prüfen.";
             } else {
                 status.textContent = "";
                 anzeigen();
