@@ -7,7 +7,6 @@ st.set_page_config(page_title="Unentschieden-Scanner Europa", page_icon="⚽", l
 st.title("⚽ Europa Unentschieden-Scanner & Serien-Tracker")
 st.write("Durchsucht automatisch über 20 europäische Ligen (ohne API-Key).")
 
-# Erweiterte Liste europäischer Ligen (ESPN Codes)
 LIGEN = {
     "🇩🇪 1. Bundesliga": "ger.1",
     "🇩🇪 2. Bundesliga": "ger.2",
@@ -31,50 +30,48 @@ LIGEN = {
     "🇬🇷 Super League": "gre.1"
 }
 
-@st.cache_data(ttl=1800) # Aktualisiert alle 30 Minuten
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+}
+
+def finde_entries(obj):
+    if isinstance(obj, dict):
+        if "entries" in obj and isinstance(obj["entries"], list):
+            return obj["entries"]
+        for v in obj.values():
+            res = finde_entries(v)
+            if res:
+                return res
+    elif isinstance(obj, list):
+        for item in obj:
+            res = finde_entries(item)
+            if res:
+                return res
+    return []
+
+@st.cache_data(ttl=1800)
 def lade_daten():
     alle_teams = []
     
     for liga_name, liga_code in LIGEN.items():
-        # 1. Tabelle abrufen
         url_standings = f"https://espn.com{liga_code}/standings"
-        # 2. Letzte Spiele (Scoreboard) für Serien-Check abrufen
-        url_scores = f"https://espn.com{liga_code}/scoreboard"
-        
         try:
-            res = requests.get(url_standings, timeout=5)
+            res = requests.get(url_standings, headers=HEADERS, timeout=8)
             data = res.json()
-            entries = data['children']['standings']['entries']
+            entries = finde_entries(data)
             
-            # Letzte Ergebnisse der Liga prüfen (ob letztes Spiel Remis war)
-            letztes_remis = set()
-            try:
-                res_s = requests.get(url_scores, timeout=4).json()
-                for event in res_s.get('events', []):
-                    status = event['status']['type']['completed']
-                    if status:
-                        comp = event['competitions']['competitors']
-                        if comp['score'] == comp['score']:
-                            letztes_remis.add(comp['team']['displayName'])
-                            letztes_remis.add(comp['team']['displayName'])
-            except Exception:
-                pass
-
             for team_data in entries:
-                team_name = team_data['team']['displayName']
-                stats = {s['name']: s['value'] for s in team_data['stats']}
+                team_name = team_data.get('team', {}).get('displayName', 'Unbekannt')
+                stats = {s['name']: s['value'] for s in team_data.get('stats', []) if 'name' in s and 'value' in s}
                 
                 spiele = int(stats.get('gamesPlayed', 0))
                 unentschieden = int(stats.get('ties', 0))
                 quote = round((unentschieden / spiele * 100), 1) if spiele > 0 else 0
                 
-                # Status-Badge berechnen
                 if quote >= 40 and spiele >= 5:
                     status_info = "🔥 Remis-Spezialist"
                 elif unentschieden == 0 and spiele >= 6:
                     status_info = "⚠️ Noch KEIN Remis!"
-                elif team_name in letztes_remis:
-                    status_info = "🤝 Zuletzt Remis"
                 else:
                     status_info = "Normal"
                 
@@ -89,8 +86,7 @@ def lade_daten():
         except Exception:
             continue
             
-    df = pd.DataFrame(alle_teams)
-    return df
+    return pd.DataFrame(alle_teams)
 
 if st.button("🔄 Live-Daten neu laden"):
     st.cache_data.clear()
@@ -99,7 +95,6 @@ with st.spinner("Scanne über 20 europäische Ligen..."):
     df = lade_daten()
 
 if not df.empty:
-    # Filter-Optionen in der Seitenleiste / oben
     col1, col2 = st.columns(2)
     with col1:
         min_spiele = st.slider("Mindestanzahl Spiele:", 0, 30, 5)
@@ -124,4 +119,4 @@ if not df.empty:
 
     st.dataframe(df_gefiltert.head(40), use_container_width=True)
 else:
-    st.error("Daten konnten nicht geladen werden. Bitte klicke oben auf 'Live-Daten neu laden'.")
+    st.error("Daten konnten nicht geladen werden. Bitte später erneut versuchen.")
