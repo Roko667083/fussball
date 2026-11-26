@@ -3,7 +3,7 @@ import pandas as pd
 import streamlit as st
 
 st.set_page_config(page_title="Unentschieden-Scanner", page_icon="⚽", layout="wide")
-st.title("⚽ Unentschieden-Scanner (1., 2. & 3. Bundesliga + Österreich)")
+st.title("⚽ Unentschieden-Scanner (DACH-Ligen)")
 
 LIGEN = {
     "🇩🇪 1. Bundesliga": "bl1",
