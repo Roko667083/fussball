@@ -30,12 +30,11 @@ LIGEN = {
 def lade_daten():
     alle_teams = []
     fehler_log = []
-    basis = ["https:", "", "://githubusercontent.com", "openfootball", "football.json", "master"]
     
     for liga_name, datei in LIGEN.items():
         data = None
         for saison in SAISONEN:
-            url = "/".join(basis + [saison, datei])
+            url = f"https://githubusercontent.com{saison}/{datei}"
             try:
                 res = requests.get(url, timeout=8)
                 if res.status_code == 200:
@@ -60,7 +59,8 @@ def lade_daten():
             
             t1 = m.get("team1")
             t2 = m.get("team2")
-            g1, g2 = ft[0], ft[1]
+            g1 = ft
+            g2 = ft
             
             if not t1 or not t2 or g1 is None or g2 is None:
                 continue
@@ -157,4 +157,3 @@ else:
     st.error("Daten konnten nicht geladen werden.")
     if fehler:
         st.write("Details:", fehler[:3])
-
