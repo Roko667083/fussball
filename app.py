@@ -7,108 +7,121 @@ st.set_page_config(page_title="Unentschieden-Scanner Europa", page_icon="⚽", l
 st.title("⚽ Europa Unentschieden-Scanner & Serien-Tracker")
 st.write("Durchsucht automatisch europäische Top- & 2. Ligen (ohne API-Key).")
 
-# Direkte, blockfreie OpenFootball-Datenquellen auf GitHub (Saison 2026/27)
+SAISONEN = ["2026-27", "2025-26"]
+
 LIGEN = {
-    "🇩🇪 1. Bundesliga": "https://githubusercontent.com",
-    "🇩🇪 2. Bundesliga": "https://githubusercontent.com",
-    "🇩🇪 3. Liga": "https://githubusercontent.com",
-    "🇦🇹 Österreich Bundesliga": "https://githubusercontent.com",
-    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League": "https://githubusercontent.com",
-    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Championship (2. Liga)": "https://githubusercontent.com",
-    "🇪🇸 La Liga": "https://githubusercontent.com",
-    "🇪🇸 La Liga 2": "https://githubusercontent.com",
-    "🇮🇹 Serie A": "https://githubusercontent.com",
-    "🇮🇹 Serie B": "https://githubusercontent.com",
-    "🇫🇷 Ligue 1": "https://githubusercontent.com",
-    "🇫🇷 Ligue 2": "https://githubusercontent.com",
-    "🇳🇱 Eredivisie": "https://githubusercontent.com",
-    "🇵🇹 Primeira Liga": "https://githubusercontent.com"
+    "🇩🇪 1. Bundesliga": "de.1.json",
+    "🇩🇪 2. Bundesliga": "de.2.json",
+    "🇩🇪 3. Liga": "de.3.json",
+    "🇦🇹 Österreich Bundesliga": "at.1.json",
+    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League": "en.1.json",
+    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Championship (2. Liga)": "en.2.json",
+    "🇪🇸 La Liga": "es.1.json",
+    "🇪🇸 La Liga 2": "es.2.json",
+    "🇮🇹 Serie A": "it.1.json",
+    "🇮🇹 Serie B": "it.2.json",
+    "🇫🇷 Ligue 1": "fr.1.json",
+    "🇫🇷 Ligue 2": "fr.2.json",
+    "🇳🇱 Eredivisie": "nl.1.json",
+    "🇵🇹 Primeira Liga": "pt.1.json"
 }
 
 @st.cache_data(ttl=1800)
 def lade_daten():
     alle_teams = []
+    fehler_log = []
     
-    for liga_name, url in LIGEN.items():
-        try:
-            res = requests.get(url, timeout=10)
-            if res.status_code != 200:
+    for liga_name, datei in LIGEN.items():
+        data = None
+        for saison in SAISONEN:
+            url = f"https://githubusercontent.com{saison}/{datei}"
+            try:
+                res = requests.get(url, timeout=8)
+                if res.status_code == 200:
+                    data = res.json()
+                    break
+            except Exception as e:
+                fehler_log.append(f"{liga_name}: {e}")
+        
+        if not data:
+            continue
+
+        matches = data.get("matches", [])
+        team_stats = {}
+        
+        for m in matches:
+            score_dict = m.get("score")
+            if not isinstance(score_dict, dict):
+                continue
+            ft = score_dict.get("ft")
+            if not isinstance(ft, list) or len(ft) < 2:
                 continue
             
-            data = res.json()
-            matches = data.get("matches", [])
+            t1 = m.get("team1")
+            t2 = m.get("team2")
+            g1, g2 = ft[0], ft[1]
             
-            team_stats = {}
+            if not t1 or not t2 or g1 is None or g2 is None:
+                continue
             
-            for m in matches:
-                score = m.get("score", {}).get("ft")
-                if not score or len(score) < 2:
-                    continue
-                
-                t1 = m.get("team1")
-                t2 = m.get("team2")
-                g1, g2 = score[0], score[1]
-                
-                for t in (t1, t2):
-                    if t not in team_stats:
-                        team_stats[t] = {
-                            "spiele": 0,
-                            "remis": 0,
-                            "remis_heim": 0,
-                            "remis_ausw": 0,
-                            "ohne_remis": 0
-                        }
-                
-                team_stats[t1]["spiele"] += 1
-                team_stats[t2]["spiele"] += 1
-                
-                if g1 == g2:
-                    team_stats[t1]["remis"] += 1
-                    team_stats[t1]["remis_heim"] += 1
-                    team_stats[t1]["ohne_remis"] = 0
-                    
-                    team_stats[t2]["remis"] += 1
-                    team_stats[t2]["remis_ausw"] += 1
-                    team_stats[t2]["ohne_remis"] = 0
-                else:
-                    team_stats[t1]["ohne_remis"] += 1
-                    team_stats[t2]["ohne_remis"] += 1
+            for t in (t1, t2):
+                if t not in team_stats:
+                    team_stats[t] = {
+                        "spiele": 0,
+                        "remis": 0,
+                        "remis_heim": 0,
+                        "remis_ausw": 0,
+                        "ohne_remis": 0
+                    }
             
-            for team, s in team_stats.items():
-                spiele = s["spiele"]
-                remis = s["remis"]
-                quote = round((remis / spiele * 100), 1) if spiele > 0 else 0
-                ohne = s["ohne_remis"]
-                
-                if quote >= 40 and spiele >= 5:
-                    status = "🔥 Remis-Spezialist"
-                elif remis == 0 and spiele >= 6:
-                    status = "⚠️ Noch KEIN Remis!"
-                elif ohne >= 8:
-                    status = f"⏳ Seit {ohne} Sp. kein Remis"
-                else:
-                    status = "Normal"
-                
-                alle_teams.append({
-                    "Mannschaft": team,
-                    "Liga": liga_name,
-                    "Spiele": spiele,
-                    "Unentschieden": remis,
-                    "Quote (%)": quote,
-                    "Heim / Auswärts": f"{s['remis_heim']} / {s['remis_ausw']}",
-                    "Ohne Remis seit": f"{ohne} Sp.",
-                    "Trend": status
-                })
-        except Exception:
-            continue
+            team_stats[t1]["spiele"] += 1
+            team_stats[t2]["spiele"] += 1
             
-    return pd.DataFrame(alle_teams)
+            if g1 == g2:
+                team_stats[t1]["remis"] += 1
+                team_stats[t1]["remis_heim"] += 1
+                team_stats[t1]["ohne_remis"] = 0
+                
+                team_stats[t2]["remis"] += 1
+                team_stats[t2]["remis_ausw"] += 1
+                team_stats[t2]["ohne_remis"] = 0
+            else:
+                team_stats[t1]["ohne_remis"] += 1
+                team_stats[t2]["ohne_remis"] += 1
+        
+        for team, s in team_stats.items():
+            spiele = s["spiele"]
+            remis = s["remis"]
+            quote = round((remis / spiele * 100), 1) if spiele > 0 else 0
+            ohne = s["ohne_remis"]
+            
+            if quote >= 40 and spiele >= 5:
+                status = "🔥 Remis-Spezialist"
+            elif remis == 0 and spiele >= 6:
+                status = "⚠️ Noch KEIN Remis!"
+            elif ohne >= 8:
+                status = f"⏳ Seit {ohne} Sp. kein Remis"
+            else:
+                status = "Normal"
+            
+            alle_teams.append({
+                "Mannschaft": team,
+                "Liga": liga_name,
+                "Spiele": spiele,
+                "Unentschieden": remis,
+                "Quote (%)": quote,
+                "Heim / Auswärts": f"{s['remis_heim']} / {s['remis_ausw']}",
+                "Ohne Remis seit": f"{ohne} Sp.",
+                "Trend": status
+            })
+            
+    return pd.DataFrame(alle_teams), fehler_log
 
 if st.button("🔄 Live-Daten neu laden"):
     st.cache_data.clear()
 
 with st.spinner("Lade europäische Spieldaten..."):
-    df = lade_daten()
+    df, fehler = lade_daten()
 
 if not df.empty:
     col1, col2, col3 = st.columns(3)
@@ -141,3 +154,5 @@ if not df.empty:
     st.dataframe(df_gefiltert.head(50), use_container_width=True)
 else:
     st.error("Daten konnten nicht geladen werden.")
+    if fehler:
+        st.write("Details:", fehler[:3])
