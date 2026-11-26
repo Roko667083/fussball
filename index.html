@@ -73,30 +73,31 @@
                     const res = await fetch(url);
                     if (res.ok) {
                         const data = await res.json();
-                        const gruppe = data.children && data.children.length > 0 ? data.children[0] : null;
-                        const entries = gruppe && gruppe.standings && gruppe.standings.entries ? gruppe.standings.entries : [];
-                        for (let i = 0; i < entries.length; i++) {
-                            const item = entries[i];
-                            const stats = item.stats || [];
-                            const gpObj = stats.find(s => s.name === "gamesPlayed");
-                            const tieObj = stats.find(s => s.name === "ties");
-                            const sp = gpObj ? Number(gpObj.value) : 0;
-                            const remis = tieObj ? Number(tieObj.value) : 0;
-                            alleTeams.push({
-                                name: item.team.shortDisplayName || item.team.displayName,
-                                liga: liga.name,
-                                spiele: sp,
-                                remis: remis,
-                                quote: sp > 0 ? +(remis / sp * 100).toFixed(1) : 0
+                        const gruppen = data.children || [];
+                        gruppen.forEach(gruppe => {
+                            const entries = (gruppe.standings && gruppe.standings.entries) ? gruppe.standings.entries : [];
+                            entries.forEach(item => {
+                                const stats = item.stats || [];
+                                const gpObj = stats.find(s => s.name === "gamesPlayed");
+                                const tieObj = stats.find(s => s.name === "ties");
+                                const sp = gpObj ? Number(gpObj.value) : 0;
+                                const remis = tieObj ? Number(tieObj.value) : 0;
+                                alleTeams.push({
+                                    name: item.team.shortDisplayName || item.team.displayName,
+                                    liga: liga.name,
+                                    spiele: sp,
+                                    remis: remis,
+                                    quote: sp > 0 ? +(remis / sp * 100).toFixed(1) : 0
+                                });
                             });
-                        }
+                        });
                     }
                 } catch (e) {}
             }
 
             if (alleTeams.length === 0) {
                 status.style.color = "#d9534f";
-                status.textContent = "Keine Daten abrufbar. Bitte im Handy-Browser testen oder Werbeblocker prüfen.";
+                status.textContent = "Keine Daten abrufbar. Bitte Internetverbindung oder Werbeblocker prüfen.";
             } else {
                 status.textContent = "";
                 anzeigen();
