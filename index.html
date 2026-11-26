@@ -61,6 +61,30 @@
             { name: "🇳🇱 Eredivisie", code: "ned.1" }
         ];
 
+        function sammleEintraege(obj, ligaName) {
+            if (!obj || typeof obj !== "object") return;
+            if (Array.isArray(obj.entries)) {
+                obj.entries.forEach(item => {
+                    if (item.team && Array.isArray(item.stats)) {
+                        const gpObj = item.stats.find(s => s.name === "gamesPlayed");
+                        const tieObj = item.stats.find(s => s.name === "ties");
+                        const sp = gpObj ? Number(gpObj.value) : 0;
+                        const remis = tieObj ? Number(tieObj.value) : 0;
+                        alleTeams.push({
+                            name: item.team.shortDisplayName || item.team.displayName,
+                            liga: ligaName,
+                            spiele: sp,
+                            remis: remis,
+                            quote: sp > 0 ? +(remis / sp * 100).toFixed(1) : 0
+                        });
+                    }
+                });
+            }
+            Object.values(obj).forEach(val => {
+                if (typeof val === "object") sammleEintraege(val, ligaName);
+            });
+        }
+
         async function ladeDaten() {
             const status = document.getElementById("status");
             status.style.color = "#0066cc";
@@ -73,31 +97,14 @@
                     const res = await fetch(url);
                     if (res.ok) {
                         const data = await res.json();
-                        const gruppen = data.children || [];
-                        gruppen.forEach(gruppe => {
-                            const entries = (gruppe.standings && gruppe.standings.entries) ? gruppe.standings.entries : [];
-                            entries.forEach(item => {
-                                const stats = item.stats || [];
-                                const gpObj = stats.find(s => s.name === "gamesPlayed");
-                                const tieObj = stats.find(s => s.name === "ties");
-                                const sp = gpObj ? Number(gpObj.value) : 0;
-                                const remis = tieObj ? Number(tieObj.value) : 0;
-                                alleTeams.push({
-                                    name: item.team.shortDisplayName || item.team.displayName,
-                                    liga: liga.name,
-                                    spiele: sp,
-                                    remis: remis,
-                                    quote: sp > 0 ? +(remis / sp * 100).toFixed(1) : 0
-                                });
-                            });
-                        });
+                        sammleEintraege(data, liga.name);
                     }
                 } catch (e) {}
             }
 
             if (alleTeams.length === 0) {
                 status.style.color = "#d9534f";
-                status.textContent = "Keine Daten abrufbar. Bitte Internetverbindung oder Werbeblocker prüfen.";
+                status.textContent = "Keine Daten abrufbar. Bitte im Handy-Browser testen oder Werbeblocker prüfen.";
             } else {
                 status.textContent = "";
                 anzeigen();
