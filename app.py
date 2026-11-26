@@ -1,3 +1,4 @@
+import io
 import requests
 import pandas as pd
 import streamlit as st
@@ -7,23 +8,30 @@ st.set_page_config(page_title="Unentschieden-Scanner Europa", page_icon="⚽", l
 st.title("⚽ Europa Unentschieden-Scanner & Serien-Tracker")
 st.write("Durchsucht automatisch europäische Top- & 2. Ligen (ohne API-Key).")
 
-SAISONEN = ["2026-27", "2025-26"]
+SAISONEN = ["2627", "2526"]
 
 LIGEN = {
-    "🇩🇪 1. Bundesliga": "de.1.json",
-    "🇩🇪 2. Bundesliga": "de.2.json",
-    "🇩🇪 3. Liga": "de.3.json",
-    "🇦🇹 Österreich Bundesliga": "at.1.json",
-    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League": "en.1.json",
-    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Championship (2. Liga)": "en.2.json",
-    "🇪🇸 La Liga": "es.1.json",
-    "🇪🇸 La Liga 2": "es.2.json",
-    "🇮🇹 Serie A": "it.1.json",
-    "🇮🇹 Serie B": "it.2.json",
-    "🇫🇷 Ligue 1": "fr.1.json",
-    "🇫🇷 Ligue 2": "fr.2.json",
-    "🇳🇱 Eredivisie": "nl.1.json",
-    "🇵🇹 Primeira Liga": "pt.1.json"
+    "🇩🇪 1. Bundesliga": "D1",
+    "🇩🇪 2. Bundesliga": "D2",
+    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League": "E0",
+    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Championship (2. Liga)": "E1",
+    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 League One (3. Liga)": "E2",
+    "🇪🇸 La Liga": "SP1",
+    "🇪🇸 La Liga 2": "SP2",
+    "🇮🇹 Serie A": "I1",
+    "🇮🇹 Serie B": "I2",
+    "🇫🇷 Ligue 1": "F1",
+    "🇫🇷 Ligue 2": "F2",
+    "🇳🇱 Eredivisie": "N1",
+    "🇵🇹 Primeira Liga": "P1",
+    "🇹🇷 Süper Lig": "T1",
+    "🇧🇪 Jupiler Pro League": "B1",
+    "🏴󠁧󠁢󠁳󠁣󠁴󠁿 Scottish Premiership": "SC0",
+    "🇬🇷 Super League": "G1"
+}
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
 
 @st.cache_data(ttl=1800)
@@ -31,77 +39,47 @@ def lade_daten():
     alle_teams = []
     fehler_log = []
     
-    for liga_name, datei in LIGEN.items():
-        data = None
+    for liga_name, code in LIGEN.items():
+        df_liga = None
         for saison in SAISONEN:
-            url = f"https://githubusercontent.com{saison}/{datei}"
+            url = f"https://football-data.co.uk{saison}/{code}.csv"
             try:
-                res = requests.get(url, timeout=8)
-                if res.status_code == 200:
-                    data = res.json()
+                res = requests.get(url, headers=HEADERS, timeout=10)
+                if res.status_code == 200 and "HomeTeam" in res.text:
+                    df_liga = pd.read_csv(io.StringIO(res.text))
                     break
             except Exception as e:
                 fehler_log.append(f"{liga_name}: {e}")
         
-        if not data:
+        if df_liga is None or df_liga.empty:
             continue
-
-        matches = data.get("matches", [])
-        team_stats = {}
+            
+        df_liga = df_liga.dropna(subset=["HomeTeam", "AwayTeam", "FTR"])
+        teams = set(df_liga["HomeTeam"]).union(set(df_liga["AwayTeam"]))
         
-        for m in matches:
-            score_dict = m.get("score")
-            if not isinstance(score_dict, dict):
-                continue
-            ft = score_dict.get("ft")
-            if not isinstance(ft, list) or len(ft) < 2:
-                continue
+        for team in teams:
+            heim = df_liga[df_liga["HomeTeam"] == team]
+            ausw = df_liga[df_liga["AwayTeam"] == team]
             
-            t1 = m.get("team1")
-            t2 = m.get("team2")
-            g1 = ft
-            g2 = ft
+            spiele = len(heim) + len(ausw)
+            remis_heim = len(heim[heim["FTR"] == "D"])
+            remis_ausw = len(ausw[ausw["FTR"] == "D"])
+            unentschieden = remis_heim + remis_ausw
+            quote = round((unentschieden / spiele * 100), 1) if spiele > 0 else 0
             
-            if not t1 or not t2 or g1 is None or g2 is None:
-                continue
-            
-            for t in (t1, t2):
-                if t not in team_stats:
-                    team_stats[t] = {
-                        "spiele": 0,
-                        "remis": 0,
-                        "remis_heim": 0,
-                        "remis_ausw": 0,
-                        "ohne_remis": 0
-                    }
-            
-            team_stats[t1]["spiele"] += 1
-            team_stats[t2]["spiele"] += 1
-            
-            if g1 == g2:
-                team_stats[t1]["remis"] += 1
-                team_stats[t1]["remis_heim"] += 1
-                team_stats[t1]["ohne_remis"] = 0
-                
-                team_stats[t2]["remis"] += 1
-                team_stats[t2]["remis_ausw"] += 1
-                team_stats[t2]["ohne_remis"] = 0
-            else:
-                team_stats[t1]["ohne_remis"] += 1
-                team_stats[t2]["ohne_remis"] += 1
-        
-        for team, s in team_stats.items():
-            spiele = s["spiele"]
-            remis = s["remis"]
-            quote = round((remis / spiele * 100), 1) if spiele > 0 else 0
-            ohne = s["ohne_remis"]
+            alle_spiele_team = df_liga[(df_liga["HomeTeam"] == team) | (df_liga["AwayTeam"] == team)]
+            ohne_remis_seit = 0
+            for _, row in alle_spiele_team.iloc[::-1].iterrows():
+                if row["FTR"] == "D":
+                    break
+                ohne_remis_seit += 1
             
             if quote >= 40 and spiele >= 5:
                 status = "🔥 Remis-Spezialist"
-            elif remis == 0 and spiele >= 6:
+            elif unentschieden == 0 and spiele >= 6:
                 status = "⚠️ Noch KEIN Remis!"
-            elif ohne >= 8:
-                status = f"⏳ Seit {ohne} Sp. kein Remis"
+            elif ohne_remis_seit >= 8:
+                status = f"⏳ Seit {ohne_remis_seit} Sp. kein Remis"
             else:
                 status = "Normal"
             
@@ -111,8 +89,8 @@ def lade_daten():
                 "Spiele": spiele,
                 "Unentschieden": remis,
                 "Quote (%)": quote,
-                "Heim / Auswärts": f"{s['remis_heim']} / {s['remis_ausw']}",
-                "Ohne Remis seit": f"{ohne} Sp.",
+                "Heim / Auswärts": f"{remis_heim} / {remis_ausw}",
+                "Ohne Remis seit": f"{ohne_remis_seit} Sp.",
                 "Trend": status
             })
             
