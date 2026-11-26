@@ -73,18 +73,32 @@
 
         async function holeLiga(code, token) {
             const ziel = `https://football-data.org{code}/standings`;
-            const proxy = `https://corsproxy.io{encodeURIComponent(ziel)}`;
-            try {
-                const res = await fetch(proxy, {
-                    headers: { "X-Auth-Token": token }
-                });
-                if (res.ok) return await res.json();
-            } catch (e) {}
-            return null;
+            const proxies = [
+                `https://corsproxy.io{encodeURIComponent(ziel)}`,
+                `https://freeboard.io{ziel}`,
+                ziel
+            ];
+
+            for (const url of proxies) {
+                try {
+                    const res = await fetch(url, {
+                        headers: { "X-Auth-Token": token }
+                    });
+                    if (res.ok) {
+                        const json = await res.json();
+                        if (json && json.standings) return { data: json, fehler: null };
+                    } else {
+                        var letzterFehler = `HTTP ${res.status}`;
+                    }
+                } catch (e) {
+                    var letzterFehler = "Proxy/Netzwerk blockiert";
+                }
+            }
+            return { data: null, fehler: letzterFehler || "Unbekannter Fehler" };
         }
 
         async function ladeDaten() {
-            const token = document.getElementById("apiKey").value.trim();
+            const token = document.getElementById("apiKey").value.replace(/\s+/g, "");
             const status = document.getElementById("status");
             if (!token) {
                 status.style.color = "#d9534f";
@@ -94,15 +108,16 @@
             localStorage.setItem("fd_token", token);
             alleTeams = [];
             document.getElementById("tabelle").style.display = "none";
+            let fehlerInfo = "";
 
             for (let i = 0; i < LIGEN.length; i++) {
                 const liga = LIGEN[i];
                 status.style.color = "#0066cc";
                 status.textContent = `Lade ${liga.name} (${i + 1} von ${LIGEN.length})...`;
 
-                const data = await holeLiga(liga.code, token);
-                if (data && data.standings) {
-                    const total = data.standings.find(s => s.type === "TOTAL");
+                const res = await holeLiga(liga.code, token);
+                if (res.data && res.data.standings) {
+                    const total = res.data.standings.find(s => s.type === "TOTAL");
                     if (total && total.table) {
                         total.table.forEach(row => {
                             const sp = row.playedGames || 0;
@@ -116,13 +131,15 @@
                             });
                         });
                     }
+                } else {
+                    fehlerInfo = res.fehler;
                 }
-                await new Promise(r => setTimeout(r, 750));
+                await new Promise(r => setTimeout(r, 800));
             }
 
             if (alleTeams.length === 0) {
                 status.style.color = "#d9534f";
-                status.textContent = "Keine Daten geladen. Bitte prüfe deinen 32-stelligen Token aus der E-Mail.";
+                status.textContent = `Keine Daten geladen (${fehlerInfo}). Bitte prüfe deinen 32-stelligen Token.`;
             } else {
                 status.textContent = "";
                 anzeigen();
