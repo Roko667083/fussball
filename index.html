@@ -51,60 +51,60 @@
         let alleTeams = [];
 
         const LIGEN = [
-            { name: "🇩🇪 1. Bundesliga", code: "ger.1" },
-            { name: "🇩🇪 2. Bundesliga", code: "ger.2" },
-            { name: "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League", code: "eng.1" },
-            { name: "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Championship", code: "eng.2" },
-            { name: "🇪🇸 La Liga", code: "esp.1" },
-            { name: "🇮🇹 Serie A", code: "ita.1" },
-            { name: "🇫🇷 Ligue 1", code: "fra.1" },
-            { name: "🇳🇱 Eredivisie", code: "ned.1" }
+            { name: "🇩🇪 1. Bundesliga", file: "de.1.json" },
+            { name: "🇩🇪 2. Bundesliga", file: "de.2.json" },
+            { name: "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League", file: "en.1.json" },
+            { name: "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Championship", file: "en.2.json" },
+            { name: "🇪🇸 La Liga", file: "es.1.json" },
+            { name: "🇮🇹 Serie A", file: "it.1.json" },
+            { name: "🇫🇷 Ligue 1", file: "fr.1.json" }
         ];
-
-        function sammleEintraege(obj, ligaName) {
-            if (!obj || typeof obj !== "object") return;
-            if (Array.isArray(obj.entries)) {
-                obj.entries.forEach(item => {
-                    if (item.team && Array.isArray(item.stats)) {
-                        const gpObj = item.stats.find(s => s.name === "gamesPlayed");
-                        const tieObj = item.stats.find(s => s.name === "ties");
-                        const sp = gpObj ? Number(gpObj.value) : 0;
-                        const remis = tieObj ? Number(tieObj.value) : 0;
-                        alleTeams.push({
-                            name: item.team.shortDisplayName || item.team.displayName,
-                            liga: ligaName,
-                            spiele: sp,
-                            remis: remis,
-                            quote: sp > 0 ? +(remis / sp * 100).toFixed(1) : 0
-                        });
-                    }
-                });
-            }
-            Object.values(obj).forEach(val => {
-                if (typeof val === "object") sammleEintraege(val, ligaName);
-            });
-        }
 
         async function ladeDaten() {
             const status = document.getElementById("status");
             status.style.color = "#0066cc";
-            status.textContent = "Lade Live-Tabellen aus ganz Europa...";
+            status.textContent = "Lade aktuelle Saison-Daten...";
             alleTeams = [];
 
             for (const liga of LIGEN) {
                 try {
-                    const url = "https://espn.com" + liga.code + "/standings";
+                    const url = "https://githubusercontent.com" + liga.file;
                     const res = await fetch(url);
                     if (res.ok) {
                         const data = await res.json();
-                        sammleEintraege(data, liga.name);
+                        const stats = {};
+                        (data.matches || []).forEach(m => {
+                            if (m.score && Array.isArray(m.score.ft) && m.score.ft.length === 2) {
+                                const t1 = m.team1;
+                                const t2 = m.team2;
+                                if (!stats[t1]) stats[t1] = { spiele: 0, remis: 0 };
+                                if (!stats[t2]) stats[t2] = { spiele: 0, remis: 0 };
+                                stats[t1].spiele += 1;
+                                stats[t2].spiele += 1;
+                                if (m.score.ft[0] === m.score.ft[1]) {
+                                    stats[t1].remis += 1;
+                                    stats[t2].remis += 1;
+                                }
+                            }
+                        });
+                        Object.keys(stats).forEach(teamName => {
+                            const sp = stats[teamName].spiele;
+                            const remis = stats[teamName].remis;
+                            alleTeams.push({
+                                name: teamName,
+                                liga: liga.name,
+                                spiele: sp,
+                                remis: remis,
+                                quote: sp > 0 ? +(remis / sp * 100).toFixed(1) : 0
+                            });
+                        });
                     }
                 } catch (e) {}
             }
 
             if (alleTeams.length === 0) {
                 status.style.color = "#d9534f";
-                status.textContent = "Keine Daten abrufbar. Bitte im Handy-Browser testen oder Werbeblocker prüfen.";
+                status.textContent = "Fehler beim Laden der GitHub-Daten.";
             } else {
                 status.textContent = "";
                 anzeigen();
