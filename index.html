@@ -3,12 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Unentschieden-Scanner (DACH-Ligen)</title>
+    <title>Europa Unentschieden-Scanner</title>
     <style>
-        body { font-family: Arial, sans-serif; max-width: 850px; margin: 20px auto; padding: 15px; background: #f4f6f9; color: #222; }
+        body { font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; padding: 15px; background: #f4f6f9; color: #222; }
         h1 { text-align: center; color: #1a202c; }
         .box { background: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
-        select, button { padding: 10px 15px; font-size: 1rem; border: 1px solid #ccc; border-radius: 6px; }
+        input, select, button { padding: 10px 14px; font-size: 1rem; border: 1px solid #ccc; border-radius: 6px; }
+        input { flex: 1; min-width: 240px; }
         button { background: #0066cc; color: white; border: none; font-weight: bold; cursor: pointer; }
         button:hover { background: #004c99; }
         table { width: 100%; border-collapse: collapse; background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
@@ -20,9 +21,10 @@
 </head>
 <body>
 
-    <h1>⚽ Unentschieden-Scanner (DACH-Ligen)</h1>
+    <h1>⚽ Europa Unentschieden-Scanner</h1>
 
     <div class="box">
+        <input type="text" id="apiKey" placeholder="Hier deinen Football-Data.org Token einfügen">
         <select id="sortierung" onchange="anzeigen()">
             <option value="remis">🏆 Meiste Unentschieden</option>
             <option value="quote">📈 Höchste Remis-Quote (%)</option>
@@ -31,7 +33,7 @@
         <button onclick="ladeDaten()">🔄 Live-Daten laden</button>
     </div>
 
-    <div id="status">Lade aktuelle Tabellen...</div>
+    <div id="status">Bitte deinen API-Token einfügen und auf „Live-Daten laden“ klicken.</div>
 
     <table id="tabelle" style="display:none;">
         <thead>
@@ -51,59 +53,76 @@
         let alleTeams = [];
 
         const LIGEN = [
-            { name: "🇩🇪 1. Bundesliga", code: "bl1" },
-            { name: "🇩🇪 2. Bundesliga", code: "bl2" },
-            { name: "🇩🇪 3. Liga", code: "bl3" },
-            { name: "🇦🇹 Österreich Bundesliga", code: "%C3%B6bl1" }
+            { name: "🇩🇪 1. Bundesliga", code: "BL1" },
+            { name: "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League", code: "PL" },
+            { name: "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Championship (2. Liga)", code: "ELC" },
+            { name: "🇪🇸 La Liga", code: "PD" },
+            { name: "🇮🇹 Serie A", code: "SA" },
+            { name: "🇫🇷 Ligue 1", code: "FL1" },
+            { name: "🇳🇱 Eredivisie", code: "DED" },
+            { name: "🇵🇹 Primeira Liga", code: "PPL" }
         ];
 
-        async function holeJson(url) {
-            const wege = [
-                url,
-                `https://corsproxy.io{encodeURIComponent(url)}`,
-                `https://codetabs.com{encodeURIComponent(url)}`
-            ];
-            for (const w of wege) {
-                try {
-                    const res = await fetch(w);
-                    if (res.ok) {
-                        const json = await res.json();
-                        if (Array.isArray(json) && json.length > 0) return json;
-                    }
-                } catch (e) {}
+        window.onload = () => {
+            const gespeichert = localStorage.getItem("fd_token");
+            if (gespeichert) {
+                document.getElementById("apiKey").value = gespeichert;
+                ladeDaten();
             }
+        };
+
+        async function holeLiga(code, token) {
+            const ziel = `https://football-data.org{code}/standings`;
+            const proxy = `https://corsproxy.io{encodeURIComponent(ziel)}`;
+            try {
+                const res = await fetch(proxy, {
+                    headers: { "X-Auth-Token": token }
+                });
+                if (res.ok) return await res.json();
+            } catch (e) {}
             return null;
         }
 
         async function ladeDaten() {
+            const token = document.getElementById("apiKey").value.trim();
             const status = document.getElementById("status");
-            status.style.color = "#0066cc";
-            status.textContent = "Lade Live-Tabellen...";
+            if (!token) {
+                status.style.color = "#d9534f";
+                status.textContent = "Bitte füge zuerst deinen Token aus der E-Mail ein!";
+                return;
+            }
+            localStorage.setItem("fd_token", token);
             alleTeams = [];
+            document.getElementById("tabelle").style.display = "none";
 
-            for (const liga of LIGEN) {
-                for (const saison of ["2026", "2025"]) {
-                    const data = await holeJson(`https://openligadb.de{liga.code}/${saison}`);
-                    if (data) {
-                        data.forEach(t => {
-                            const sp = t.matches || 0;
-                            const remis = t.draw || 0;
+            for (let i = 0; i < LIGEN.length; i++) {
+                const liga = LIGEN[i];
+                status.style.color = "#0066cc";
+                status.textContent = `Lade ${liga.name} (${i + 1} von ${LIGEN.length})...`;
+
+                const data = await holeLiga(liga.code, token);
+                if (data && data.standings) {
+                    const total = data.standings.find(s => s.type === "TOTAL");
+                    if (total && total.table) {
+                        total.table.forEach(row => {
+                            const sp = row.playedGames || 0;
+                            const remis = row.draw || 0;
                             alleTeams.push({
-                                name: t.teamName,
+                                name: row.team.shortName || row.team.name,
                                 liga: liga.name,
                                 spiele: sp,
                                 remis: remis,
                                 quote: sp > 0 ? +(remis / sp * 100).toFixed(1) : 0
                             });
                         });
-                        break;
                     }
                 }
+                await new Promise(r => setTimeout(r, 750));
             }
 
             if (alleTeams.length === 0) {
                 status.style.color = "#d9534f";
-                status.textContent = "Server antwortet nicht. Bitte kurz warten und erneut klicken.";
+                status.textContent = "Keine Daten geladen. Bitte prüfe deinen 32-stelligen Token aus der E-Mail.";
             } else {
                 status.textContent = "";
                 anzeigen();
@@ -120,12 +139,12 @@
             } else if (modus === "quote") {
                 liste.sort((a, b) => b.quote - a.quote || b.remis - a.remis);
             } else {
-                liste = liste.filter(t => t.remis === 0 && t.spiele >= 3).sort((a, b) => b.spiele - a.spiele);
+                liste = liste.filter(t => t.remis === 0 && t.spiele >= 4).sort((a, b) => b.spiele - a.spiele);
             }
 
             const tbody = document.getElementById("tbody");
             tbody.innerHTML = "";
-            liste.forEach((t, idx) => {
+            liste.slice(0, 50).forEach((t, idx) => {
                 tbody.innerHTML += `
                     <tr>
                         <td><strong>${idx + 1}.</strong></td>
@@ -139,8 +158,6 @@
             });
             document.getElementById("tabelle").style.display = "table";
         }
-
-        window.onload = ladeDaten;
     </script>
 </body>
 </html>
