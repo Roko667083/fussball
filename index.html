@@ -54,7 +54,7 @@
             { name: "🇩🇪 1. Bundesliga", code: "bl1" },
             { name: "🇩🇪 2. Bundesliga", code: "bl2" },
             { name: "🇩🇪 3. Liga", code: "bl3" },
-            { name: "🇦🇹 Österreich Bundesliga", code: "öbl1" }
+            { name: "🇦🇹 Österreich Bundesliga", code: "%C3%B6bl1" }
         ];
 
         async function ladeDaten() {
@@ -90,7 +90,7 @@
 
             if (alleTeams.length === 0) {
                 status.style.color = "#d9534f";
-                status.textContent = "Fehler beim Laden. Bitte erneut versuchen.";
+                status.textContent = "Server antwortet gerade nicht. Bitte in 10 Sekunden nochmal klicken.";
             } else {
                 status.textContent = "";
                 anzeigen();
