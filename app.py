@@ -1,56 +1,133 @@
-import requests
-import pandas as pd
-import streamlit as st
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unentschieden-Scanner (DACH-Ligen)</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 850px; margin: 20px auto; padding: 15px; background: #f4f6f9; color: #222; }
+        h1 { text-align: center; color: #1a202c; }
+        .box { background: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+        select, button { padding: 10px 15px; font-size: 1rem; border: 1px solid #ccc; border-radius: 6px; }
+        button { background: #0066cc; color: white; border: none; font-weight: bold; cursor: pointer; }
+        button:hover { background: #004c99; }
+        table { width: 100%; border-collapse: collapse; background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #0066cc; color: white; }
+        tr:hover { background: #f9fbfd; }
+        #status { font-weight: bold; margin-bottom: 15px; text-align: center; color: #0066cc; }
+    </style>
+</head>
+<body>
 
-st.set_page_config(page_title="Unentschieden-Scanner", page_icon="⚽", layout="wide")
-st.title("⚽ Unentschieden-Scanner (DACH-Ligen)")
+    <h1>⚽ Unentschieden-Scanner (DACH-Ligen)</h1>
 
-LIGEN = {
-    "🇩🇪 1. Bundesliga": "bl1",
-    "🇩🇪 2. Bundesliga": "bl2",
-    "🇩🇪 3. Liga": "bl3",
-    "🇦🇹 Österreich Bundesliga": "öbl1"
-}
+    <div class="box">
+        <select id="sortierung" onchange="anzeigen()">
+            <option value="remis">🏆 Meiste Unentschieden</option>
+            <option value="quote">📈 Höchste Remis-Quote (%)</option>
+            <option value="null">⚠️ Noch KEIN Remis</option>
+        </select>
+        <button onclick="ladeDaten()">🔄 Live-Daten laden</button>
+    </div>
 
-@st.cache_data(ttl=1800)
-def lade_daten():
-    alle_teams = []
-    for liga_name, code in LIGEN.items():
-        for jahr in ["2026", "2025"]:
-            url = f"https://openligadb.de{code}/{jahr}"
-            try:
-                res = requests.get(url, timeout=8)
-                if res.status_code == 200 and len(res.json()) > 0:
-                    for t in res.json():
-                        sp = int(t.get("matches", 0))
-                        remis = int(t.get("draw", 0))
-                        alle_teams.append({
-                            "Mannschaft": t.get("teamName"),
-                            "Liga": liga_name,
-                            "Spiele": sp,
-                            "Unentschieden": remis,
-                            "Quote (%)": round((remis / sp * 100), 1) if sp > 0 else 0
-                        })
-                    break
-            except Exception:
-                continue
-    return pd.DataFrame(alle_teams)
+    <div id="status">Lade aktuelle Tabellen...</div>
 
-if st.button("🔄 Live-Daten aktualisieren"):
-    st.cache_data.clear()
+    <table id="tabelle" style="display:none;">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Mannschaft</th>
+                <th>Liga</th>
+                <th>Spiele</th>
+                <th>Remis</th>
+                <th>Quote</th>
+            </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+    </table>
 
-df = lade_daten()
+    <script>
+        let alleTeams = [];
 
-if not df.empty:
-    ansicht = st.selectbox("Sortierung:", ["🏆 Meiste Unentschieden", "📈 Höchste Quote (%)", "⚠️ Noch KEIN Remis"])
-    if ansicht == "🏆 Meiste Unentschieden":
-        df = df.sort_values(by=["Unentschieden", "Quote (%)"], ascending=False)
-    elif ansicht == "📈 Höchste Quote (%)":
-        df = df.sort_values(by=["Quote (%)", "Unentschieden"], ascending=False)
-    else:
-        df = df[(df["Unentschieden"] == 0) & (df["Spiele"] >= 3)].sort_values(by="Spiele", ascending=False)
-    df = df.reset_index(drop=True)
-    df.index += 1
-    st.dataframe(df, use_container_width=True)
-else:
-    st.error("Keine Daten geladen.")
+        const LIGEN = [
+            { name: "🇩🇪 1. Bundesliga", code: "bl1" },
+            { name: "🇩🇪 2. Bundesliga", code: "bl2" },
+            { name: "🇩🇪 3. Liga", code: "bl3" },
+            { name: "🇦🇹 Österreich Bundesliga", code: "öbl1" }
+        ];
+
+        async function ladeDaten() {
+            const status = document.getElementById("status");
+            status.style.color = "#0066cc";
+            status.textContent = "Lade Live-Tabellen...";
+            alleTeams = [];
+
+            for (const liga of LIGEN) {
+                for (const saison of ["2026", "2025"]) {
+                    try {
+                        const res = await fetch(`https://openligadb.de{liga.code}/${saison}`);
+                        if (res.ok) {
+                            const data = await res.json();
+                            if (Array.isArray(data) && data.length > 0) {
+                                data.forEach(t => {
+                                    const sp = t.matches || 0;
+                                    const remis = t.draw || 0;
+                                    alleTeams.push({
+                                        name: t.teamName,
+                                        liga: liga.name,
+                                        spiele: sp,
+                                        remis: remis,
+                                        quote: sp > 0 ? +(remis / sp * 100).toFixed(1) : 0
+                                    });
+                                });
+                                break;
+                            }
+                        }
+                    } catch (e) {}
+                }
+            }
+
+            if (alleTeams.length === 0) {
+                status.style.color = "#d9534f";
+                status.textContent = "Fehler beim Laden. Bitte erneut versuchen.";
+            } else {
+                status.textContent = "";
+                anzeigen();
+            }
+        }
+
+        function anzeigen() {
+            if (alleTeams.length === 0) return;
+            const modus = document.getElementById("sortierung").value;
+            let liste = [...alleTeams];
+
+            if (modus === "remis") {
+                liste.sort((a, b) => b.remis - a.remis || b.quote - a.quote);
+            } else if (modus === "quote") {
+                liste.sort((a, b) => b.quote - a.quote || b.remis - a.remis);
+            } else {
+                liste = liste.filter(t => t.remis === 0 && t.spiele >= 3).sort((a, b) => b.spiele - a.spiele);
+            }
+
+            const tbody = document.getElementById("tbody");
+            tbody.innerHTML = "";
+            liste.forEach((t, idx) => {
+                tbody.innerHTML += `
+                    <tr>
+                        <td><strong>${idx + 1}.</strong></td>
+                        <td>${t.name}</td>
+                        <td>${t.liga}</td>
+                        <td>${t.spiele}</td>
+                        <td><strong>${t.remis}</strong></td>
+                        <td>${t.quote}%</td>
+                    </tr>
+                `;
+            });
+            document.getElementById("tabelle").style.display = "table";
+        }
+
+        window.onload = ladeDaten;
+    </script>
+</body>
+</html>
